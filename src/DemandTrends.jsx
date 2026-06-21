@@ -63,16 +63,26 @@ const DemandTrends = () => {
     { id: 'CAT-EV-03', name: 'Gen-1 Powertrain (Phased Out)', trendLine: [400, 320, 250, 180, 100, 50], status: 'Declining', growth: '-85%', color: 'bg-red-500' },
   ];
 
-  // 4. DATA SKU ACTIONABLE (DITAMBAH PARAMETER LEAD TIME & LOKASI FISIK)
-  const [actionableSkus, setActionableSkus] = useState([
+  // 4. DATA SKU ACTIONABLE (REVISI: PERSISTENCE ENGINE LOCAL STORAGE)
+  const defaultActionableSkus = [
     { id: 'SKU-ARS-OBC01', name: 'Gen-1 On-Board Charger (OBC)', type: 'Dead Stock', severity: 'Critical', issue: 'Demand dropped 85% due to Gen-2 release. Capital trapped.', stockValue: 1250000, status: 'Pending Action', currLoc: 'Zone A (Fast Pick)', targetLoc: 'Zone D (Deep Storage)' },
-    
-    { id: 'SKU-ARS-LFP02', name: 'LFP Battery Pack 75kWh', type: 'Surge Warning', severity: 'Warning', issue: 'B2B Fleet Order spike detected (+150%).', currentStock: 120, suggestedMin: 850, status: 'Pending Action', 
-      daysToSurge: 45, supplierLT: 30, currLoc: 'Zone B (Cold Storage)', targetLoc: 'Zone A (Staging)' }, // AMAN: Lead Time (30) < Surge (45)
-      
-    { id: 'SKU-ARS-SNT01', name: 'ADAS Radar Sensor Kit', type: 'Surge Warning', severity: 'Critical', issue: 'Model-X Launch imminent. Massive component spike.', currentStock: 50, suggestedMin: 1800, status: 'Pending Action', 
-      daysToSurge: 12, supplierLT: 35, currLoc: 'Zone D (Clean Room)', targetLoc: 'Zone A (Fast Pick)' }, // BAHAYA: Lead Time (35) > Surge (12)
-  ]);
+    { id: 'SKU-ARS-LFP02', name: 'LFP Battery Pack 75kWh', type: 'Surge Warning', severity: 'Warning', issue: 'B2B Fleet Order spike detected (+150%).', currentStock: 120, suggestedMin: 850, status: 'Pending Action', daysToSurge: 45, supplierLT: 30, currLoc: 'Zone B (Cold Storage)', targetLoc: 'Zone A (Staging)' }, 
+    { id: 'SKU-ARS-SNT01', name: 'ADAS Radar Sensor Kit', type: 'Surge Warning', severity: 'Critical', issue: 'Model-X Launch imminent. Massive component spike.', currentStock: 50, suggestedMin: 1800, status: 'Pending Action', daysToSurge: 12, supplierLT: 35, currLoc: 'Zone D (Clean Room)', targetLoc: 'Zone A (Fast Pick)' }, 
+  ];
+
+  const [actionableSkus, setActionableSkus] = useState(() => {
+    try {
+      const saved = window.localStorage.getItem('zentryx_actionableSkus');
+      return saved ? JSON.parse(saved) : defaultActionableSkus;
+    } catch {
+      return defaultActionableSkus;
+    }
+  });
+
+  // Menyimpan perubahan ke Local Storage setiap kali actionableSkus diupdate
+  useEffect(() => {
+    window.localStorage.setItem('zentryx_actionableSkus', JSON.stringify(actionableSkus));
+  }, [actionableSkus]);
 
   const addToast = (message, type = 'success') => {
     const id = Date.now();

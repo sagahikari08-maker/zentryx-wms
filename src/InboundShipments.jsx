@@ -1,13 +1,12 @@
-import React, { useState, useContext, useMemo } from 'react';
+import React, { useState, useContext, useMemo, useEffect } from 'react';
 import { AppContext } from './AppContext';
 
 // ─── COMPONENT UTAMA ──────────────────────────────────────────────────────────
 const InboundShipments = () => {
   const { bahasa } = useContext(AppContext);
 
-  // 1. DATA SIMULASI (Richer Data Structure untuk POV ARUS Motors)
-  // Di dunia nyata, ini diambil dari API Zentryx berdasarkan ASN yang dikirim vendor
-  const [shipments] = useState([
+  // 1. DATA SIMULASI (Dengan Persistence Engine / Local Storage)
+  const defaultShipments = [
     { 
       id: 'ASN-ARS-2608-01', vendor: 'PT Voltara Daya Nusantara', poRef: 'PO-ARS-260801',
       eta: '2026-09-15', carrier: 'ARUS Internal Logistics', status: 'In Transit',
@@ -36,13 +35,34 @@ const InboundShipments = () => {
         { sku: 'SKU-ARS-CHZ04', name: 'Underbody Steel Chassis Frame', qty: 90 },
       ]
     },
-  ]);
+  ];
+
+  const [shipments, setShipments] = useState(() => {
+    try {
+      const saved = window.localStorage.getItem('zentryx_inboundShipments');
+      return saved ? JSON.parse(saved) : defaultShipments;
+    } catch {
+      return defaultShipments;
+    }
+  });
+
+  // 🚀 PENYIMPANAN OTOMATIS: Menyimpan perubahan ke Local Storage setiap ada update
+  useEffect(() => {
+    window.localStorage.setItem('zentryx_inboundShipments', JSON.stringify(shipments));
+  }, [shipments]);
 
   // 2. STATE UNTUK UI (Filter & Modal)
   const [searchQuery, setSearchQuery] = useState('');
-  const [selectedASN, setSelectedASN] = useState(null); // Untuk Modal Detail
+  const [selectedASN, setSelectedASN] = useState(null);
 
-  // 3. LOGIKA FILTERING & SORTING (Sangat dibutuhkan User)
+  // ─── 🚀 FITUR: FUNGSI TERIMA BARANG LANGSUNG ───
+  const handleReceive = (id) => {
+    setShipments(prev => prev.map(ship => 
+      ship.id === id ? { ...ship, status: 'Received' } : ship
+    ));
+  };
+
+  // 3. LOGIKA FILTERING & SORTING
   const filteredShipments = useMemo(() => {
     return shipments
       .filter(s => 
@@ -50,11 +70,10 @@ const InboundShipments = () => {
         s.vendor.toLowerCase().includes(searchQuery.toLowerCase()) ||
         s.poRef.toLowerCase().includes(searchQuery.toLowerCase())
       )
-      // Urutkan: Yang terlambat/paling dekat ETA-nya di atas
       .sort((a, b) => new Date(a.eta) - new Date(b.eta));
   }, [shipments, searchQuery]);
 
-  // 4. LOGIKA STATISTIK (Dashboard Cards untuk Manajer)
+  // 4. LOGIKA STATISTIK (Dashboard Cards)
   const stats = useMemo(() => {
     const today = new Date();
     today.setHours(0,0,0,0);
@@ -70,15 +89,14 @@ const InboundShipments = () => {
     };
   }, [shipments]);
 
-
   // 5. HELPER: CEK OVERDUE UNTUK STYLING BARIS
   const getRowClass = (eta, status) => {
     if (status !== 'In Transit' && status !== 'Pending') return '';
     const today = new Date();
     today.setHours(0,0,0,0);
     const etaDate = new Date(eta);
-    if (etaDate < today) return 'bg-red-50 hover:bg-red-100'; // Merah jika terlambat
-    if (etaDate.getTime() === today.getTime()) return 'bg-yellow-50 hover:bg-yellow-100'; // Kuning jika hari ini
+    if (etaDate < today) return 'bg-red-50 hover:bg-red-100'; 
+    if (etaDate.getTime() === today.getTime()) return 'bg-yellow-50 hover:bg-yellow-100'; 
     return 'hover:bg-blue-50';
   };
 
@@ -98,13 +116,12 @@ const InboundShipments = () => {
             {bahasa === 'en' ? 'Track, monitor, and prepare EV manufacturing labor for incoming supplier shipments.' : 'Pantau, monitor, dan siapkan SDM perakitan EV untuk menerima pengiriman komponen masuk.'}
           </p>
         </div>
-        {/* Tombol Action Global */}
         <button className="bg-gray-100 hover:bg-gray-200 text-gray-700 border border-gray-300 px-4 py-2 text-xs font-bold uppercase tracking-wider rounded-sm transition-colors shadow-sm">
           ↓ Download Manifest
         </button>
       </div>
 
-      {/* ── 5. NEW FEATURE: STATS CARDS (Dashboard) ── */}
+      {/* ── STATS CARDS ── */}
       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 mb-5">
         {[
           { label: 'Total Shipments', value: stats.total, color: 'border-l-[#4d5f79]', textColor: 'text-[#4d5f79]' },
@@ -119,7 +136,7 @@ const InboundShipments = () => {
         ))}
       </div>
 
-      {/* ── 6. NEW FEATURE: SEARCH & FILTER BAR ── */}
+      {/* ── SEARCH & FILTER BAR ── */}
       <div className="bg-white border border-gray-300 shadow-sm p-3 mb-0 flex gap-2">
         <input 
           type="text"
@@ -139,7 +156,6 @@ const InboundShipments = () => {
       {/* ── TABLE AREA ── */}
       <div className="bg-white border border-gray-300 shadow-sm overflow-hidden">
         
-        {/* Info Ringkas di atas tabel */}
         <div className="bg-blue-50 px-4 py-2.5 border-b border-blue-100 flex items-center gap-2 text-xs text-[#125ab2]">
           <span>ℹ️</span>
           <span className="font-semibold">
@@ -170,7 +186,6 @@ const InboundShipments = () => {
                   const isOverdue = getRowClass(ship.eta, ship.status).includes('red');
                   return (
                     <tr key={ship.id} className={`border-b border-gray-100 transition-colors ${getRowClass(ship.eta, ship.status)}`}>
-                      {/* ASN ID - Bisa diklik untuk Detail */}
                       <td className="py-3 px-4">
                         <button 
                           onClick={() => setSelectedASN(ship)}
@@ -198,8 +213,12 @@ const InboundShipments = () => {
                       <td className="py-3 px-4 text-center">
                         {ship.status === 'In Transit' || ship.status === 'Pending' ? (
                           <button 
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleReceive(ship.id); 
+                            }}
                             className="bg-[#125ab2] hover:bg-[#0e4487] text-white px-4 py-1.5 rounded-sm text-[10px] font-bold uppercase transition-colors shadow-sm"
-                            title="Go to Receive PO Module"
+                            title="Mark as Received"
                           >
                             {bahasa === 'en' ? 'Start Receive' : 'Mulai Terima'}
                           </button>
@@ -217,7 +236,6 @@ const InboundShipments = () => {
           </table>
         </div>
 
-        {/* Contoh Pagination Simple */}
         <div className="px-4 py-2 border-t border-gray-200 bg-gray-50 text-xs text-gray-500 font-bold flex justify-between items-center">
             <div>Showing {filteredShipments.length} ASN(s)</div>
             <div className="flex gap-1">
@@ -227,7 +245,7 @@ const InboundShipments = () => {
         </div>
       </div>
 
-      {/* ── 7. NEW FEATURE: MODAL DETAIL ASN (Drill-Down) ── */}
+      {/* ── MODAL DETAIL ASN ── */}
       {selectedASN && (
         <div className="fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-sm w-full max-w-[600px] shadow-2xl overflow-hidden flex flex-col max-h-[90vh] animate-fade-in">
