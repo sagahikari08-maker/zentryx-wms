@@ -10,7 +10,7 @@ const Toast = ({ toasts, removeToast }) => (
         type === 'error' ? 'bg-red-600 border-red-800' : 
         type === 'warning' ? 'bg-amber-500 border-amber-800' : 'bg-[#125ab2] border-blue-800'
       }`}>
-        <span className="text-base">{type === 'success' ? '✓' : type === 'error' ? '✕' : type === 'warning' ? '⚠️' : 'ℹ'}</span>
+        <span className="text-base">{type === 'success' ? '✓' : type === 'error' ? '✕' : type === 'warning' ? '⚠' : 'ℹ'}</span>
         <span className="flex-1">{message}</span>
         <button onClick={() => removeToast(id)} className="opacity-70 hover:opacity-100 text-lg leading-none transition-opacity">×</button>
       </div>
@@ -256,7 +256,7 @@ const Tasks = () => {
       })
       .sort((a, b) => {
         if (sortBy === 'priority') {
-          const priorityWeight = { 'Critical': 4, 'High': 3, 'Medium': 2, 'Low': 1 };
+          const priorityWeight = (p) => ({ 'Critical': 4, 'High': 3, 'Medium': 2, 'Low': 1 }[p] || 0);
           return sortDir === 'asc' ? priorityWeight(a.priority) - priorityWeight(b.priority) : priorityWeight(b.priority) - priorityWeight(a.priority);
         }
         if (sortBy === 'status') {
@@ -454,7 +454,7 @@ const Tasks = () => {
               <button onClick={closeModal} className="text-blue-400 font-bold text-xl leading-none px-2">✕</button>
             </div>
             <form onSubmit={handleSave} className="flex flex-col flex-1 overflow-hidden">
-              <div className="p-6 overflow-y-auto flex-1 text-sm flex flex-col gap-4">
+              <div className="p-6 overflow-y-auto flex-1 text-sm flex flex-col gap-4 custom-scrollbar">
                 
                 <div className="bg-slate-50 border border-slate-200 p-3 rounded-sm mb-2">
                   <label className="block text-[9px] font-black text-[#125ab2] uppercase tracking-widest mb-2 flex items-center gap-1">
@@ -482,29 +482,29 @@ const Tasks = () => {
                 </div>
                 <div>
                   <label className="block text-[9px] font-bold text-gray-500 uppercase tracking-wider mb-1.5">Instruction / Description *</label>
-                  <input type="text" value={form.desc} onChange={e => setForm({...form, desc: e.target.value})} className="w-full border border-gray-300 p-2.5 text-sm font-bold text-gray-900 rounded-sm" required/>
+                  <input type="text" value={form.desc} onChange={e => setForm({...form, desc: e.target.value})} className="w-full border border-gray-300 p-2.5 text-sm font-bold text-gray-900 rounded-sm outline-none focus:border-[#125ab2]" required/>
                 </div>
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <label className="block text-[9px] font-bold text-gray-500 uppercase tracking-wider mb-1.5">Target Zone / Location *</label>
-                    <select value={form.zone} onChange={e => setForm({...form, zone: e.target.value})} className="w-full border border-gray-300 p-2.5 text-xs font-semibold bg-white rounded-sm">
+                    <select value={form.zone} onChange={e => setForm({...form, zone: e.target.value})} className="w-full border border-gray-300 p-2.5 text-xs font-semibold bg-white rounded-sm outline-none focus:border-[#125ab2]">
                       {options.zones.map(z => <option key={z} value={z}>{z}</option>)}
                     </select>
                   </div>
                   <div>
                     <label className="block text-[9px] font-bold text-gray-500 uppercase tracking-wider mb-1.5">Operator Assignee *</label>
-                    <input type="text" value={form.assignee} onChange={e => setForm({...form, assignee: e.target.value})} className="w-full border border-gray-300 p-2.5 text-xs font-semibold rounded-sm" required/>
+                    <input type="text" value={form.assignee} onChange={e => setForm({...form, assignee: e.target.value})} className="w-full border border-gray-300 p-2.5 text-xs font-semibold rounded-sm outline-none focus:border-[#125ab2]" required/>
                   </div>
                 </div>
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <label className="block text-[9px] font-bold text-gray-500 uppercase tracking-wider mb-1.5">SLA Due Date *</label>
-                    <input type="date" value={form.dueDate} onChange={e => setForm({...form, dueDate: e.target.value})} className="w-full border border-gray-300 p-2.5 font-mono text-xs font-bold rounded-sm" required/>
+                    <input type="date" value={form.dueDate} onChange={e => setForm({...form, dueDate: e.target.value})} className="w-full border border-gray-300 p-2.5 font-mono text-xs font-bold rounded-sm outline-none focus:border-[#125ab2]" required/>
                   </div>
                 </div>
                 <div>
                   <label className="block text-[9px] font-bold text-gray-500 uppercase tracking-wider mb-1.5">Additional Handling Notes</label>
-                  <textarea rows="2" value={form.notes} onChange={e => setForm({...form, notes: e.target.value})} className="w-full border border-gray-300 p-2.5 text-xs rounded-sm resize-none shadow-sm"></textarea>
+                  <textarea rows="2" value={form.notes} onChange={e => setForm({...form, notes: e.target.value})} className="w-full border border-gray-300 p-2.5 text-xs rounded-sm resize-none shadow-sm outline-none focus:border-[#125ab2]"></textarea>
                 </div>
               </div>
               <div className="bg-gray-50 border-t border-gray-200 px-6 py-4 flex justify-end gap-3 shrink-0">
@@ -534,7 +534,7 @@ const Tasks = () => {
               </div>
             </div>
             
-            <div className="p-6 overflow-y-auto flex-1 space-y-6 text-sm text-gray-800 bg-slate-50">
+            <div className="p-6 overflow-y-auto flex-1 space-y-6 text-sm text-gray-800 bg-slate-50 custom-scrollbar">
               
               {/* JIKA TERKUNCI OLEH DEPENDENCY */}
               {liveDetailTask.isLocked ? (
