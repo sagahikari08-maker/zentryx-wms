@@ -83,19 +83,30 @@ const DocumentCenter = () => {
 
   const [selectedSlips, setSelectedSlips] = useState([]);
 
-  // 3. DATA BILL OF LADING (FREIGHT LOGISTICS)
-  const [bolData, setBolData] = useState([
-    { 
-      id: 'BOL-ARS-99201', carrier: 'Siba Surya Logistics', destination: 'Assembly Hub Surabaya', pallets: 12, status: 'Pending Signature', date: new Date().toLocaleDateString('en-GB'), driver: 'Waiting...',
-      vehiclePlate: 'L 9012 KJL', sealNumber: 'SEAL-77192A', totalWeight: '14,500 KG',
-      cargoDetails: 'Mixed Heavy Components (Chassis & Castings). Secure load strictly.'
-    },
-    { 
-      id: 'BOL-ARS-99202', carrier: 'Maersk Line (Export)', destination: 'Port of Singapore', pallets: 40, status: 'Signed & Dispatched', date: new Date(Date.now() - 86400000).toLocaleDateString('en-GB'), driver: 'Agus T.',
-      vehiclePlate: 'B 1100 XXX (40ft Container)', sealNumber: 'MAEU-882110', totalWeight: '28,200 KG',
-      cargoDetails: 'Export Grade Precision Sensors & Controllers. Ambient Temperature.'
-    },
-  ]);
+  // 3. DATA BILL OF LADING (FREIGHT LOGISTICS) 
+  // 🚀 REVISI: Menggunakan Local Storage Initialization agar permanen
+  const [bolData, setBolData] = useState(() => {
+    try {
+      const saved = window.localStorage.getItem('zentryx_bolData');
+      return saved ? JSON.parse(saved) : [
+        { 
+          id: 'BOL-ARS-99201', carrier: 'Siba Surya Logistics', destination: 'Assembly Hub Surabaya', pallets: 12, status: 'Pending Signature', date: new Date().toLocaleDateString('en-GB'), driver: 'Waiting...',
+          vehiclePlate: 'L 9012 KJL', sealNumber: 'SEAL-77192A', totalWeight: '14,500 KG',
+          cargoDetails: 'Mixed Heavy Components (Chassis & Castings). Secure load strictly.'
+        },
+        { 
+          id: 'BOL-ARS-99202', carrier: 'Maersk Line (Export)', destination: 'Port of Singapore', pallets: 40, status: 'Signed & Dispatched', date: new Date(Date.now() - 86400000).toLocaleDateString('en-GB'), driver: 'Agus T.',
+          vehiclePlate: 'B 1100 XXX (40ft Container)', sealNumber: 'MAEU-882110', totalWeight: '28,200 KG',
+          cargoDetails: 'Export Grade Precision Sensors & Controllers. Ambient Temperature.'
+        },
+      ];
+    } catch { return []; }
+  });
+
+  // 🚀 REVISI: Persistence Engine untuk menyimpan data saat ada perubahan E-Signature
+  useEffect(() => {
+    window.localStorage.setItem('zentryx_bolData', JSON.stringify(bolData));
+  }, [bolData]);
 
   // 4. DATA COMMERCIAL INVOICES (B2B EV BILLING)
   const [invoices] = useState([
@@ -747,7 +758,7 @@ const DocumentCenter = () => {
       )}
 
       {/* ========================================================================= */}
-      {/* 🛡️ DYNAMIC MODAL: E-SIGNATURE PAD FOR DRIVERS                             */}
+      {/* 🛡️ DYNAMIC MODAL: E-SIGNATURE PAD FOR DRIVERS                           */}
       {/* ========================================================================= */}
       {signModal.isOpen && signModal.data && (
         <div className="fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center z-50 p-4 sm:p-6 overflow-hidden">

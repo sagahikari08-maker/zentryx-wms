@@ -43,6 +43,10 @@ const PickPackShip = () => {
   // ─── 🚀 INJEKSI: Memanggil taskData & setInventoryData dari AppContext ───
   const { soData, setSoData, bahasa, taskData, setInventoryData } = useContext(AppContext);
 
+  // ─── CONSTANTS & OPTIONS (MEMPERBAIKI BUG REFERENCE ERROR) ───────────────
+  const courierOptions = ['Zentryx Fleet Transport', 'ARUS Internal Logistics', 'Maersk Global Freight', 'DHL Enterprise Express'];
+  const typeOptions = ['Standard Parts', 'Heavy Chassis', 'Hazmat (LFP Battery)', 'Electronics (ESD)', 'Finished Goods'];
+
   // ─── ARUS MOTORS AUTO-SEEDER (HARD OVERRIDE) ─────────────────────────────
   useEffect(() => {
     const isOldData = soData.length === 0 || !soData.some(so => so.id?.startsWith('SO-ARS'));
@@ -125,6 +129,10 @@ const PickPackShip = () => {
   const [editSO, setEditSO]             = useState(null);
   const [editForm, setEditForm]         = useState({});
   const [deleteConfirmId, setDeleteConfirmId] = useState(null);
+  
+  // States for Batch Processing (MEMPERBAIKI BUG)
+  const [isBatchModalOpen, setIsBatchModalOpen] = useState(false);
+  const [batchCourier, setBatchCourier] = useState('Zentryx Fleet Transport');
 
   // ─── TABLE STATES ────────────────────────────────────────────────────────
   const [selectedIds, setSelectedIds]       = useState([]);
@@ -149,11 +157,12 @@ const PickPackShip = () => {
       else if (editSO)       setEditSO(null);
       else if (detailSO)     setDetailSO(null);
       else if (isNewSOModalOpen) setIsNewSOModalOpen(false);
+      else if (isBatchModalOpen) setIsBatchModalOpen(false);
       else if (deleteConfirmId)  setDeleteConfirmId(null);
     };
     document.addEventListener('keydown', handleKeyDown);
     return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [activeSO, editSO, detailSO, isNewSOModalOpen, deleteConfirmId]);
+  }, [activeSO, editSO, detailSO, isNewSOModalOpen, isBatchModalOpen, deleteConfirmId]);
 
   // ─── WORKFLOW STAGE HANDLERS ─────────────────────────────────────────────
   const handleStartPicking  = useCallback((id) => { setSoData(prev => prev.map(so => so.id === id ? { ...so, status: 'Picking',  pickingStartAt: new Date().toISOString() } : so)); addToast(`Task Sent: ${id} → Picking`, 'info'); }, [setSoData, addToast]);
@@ -473,7 +482,7 @@ const PickPackShip = () => {
   };
 
   // ─── BATCH & SINGLE SHIP ─────────────────────────────────────────────────
-  const handleBatchPrint = () => {
+  const handleBatchPrintExecute = () => {
     const toPrint = soData.filter(so => selectedIds.includes(so.id) && so.status === 'Packing');
     if (toPrint.length === 0) return addToast('Select orders currently in "Packing" stage to generate labels.', 'warning');
     
@@ -481,13 +490,34 @@ const PickPackShip = () => {
     const labelsHTML = toPrint.map(so => {
       const tn = generateTrackingNumber();
       newNums[so.id] = tn;
-      return `<div class="label-page">${buildLabelHTML(so, 'ZENTRYX FLEET TRANSPORT', tn)}</div>`;
+      return `<div class="label-page">${buildLabelHTML(so, batchCourier, tn)}</div>`;
     }).join('');
     
-    openPrintWindow('Batch Freight Labels - ARUS', shippingLabelStyles, labelsHTML);
+    const finalHTML = `
+      <html>
+        <head>
+          <title>Batch Freight Labels - ARUS</title>
+          ${fontLinks}
+          <style>
+            ${shippingLabelStyles}
+            @media print { body { background-color: white; padding: 0; } .label-page { page-break-after: always; padding: 20px; } .label-wrapper { border: none; } }
+            @media screen { .label-page { padding: 40px; border-bottom: 5px dashed #ccc; } }
+          </style>
+        </head>
+        <body>
+          ${labelsHTML}
+          <script>setTimeout(() => { window.print(); }, 1000);</script>
+        </body>
+      </html>
+    `;
     
-    setSoData(soData.map(so => newNums[so.id] ? { ...so, status: 'Shipped', trackingNumber: newNums[so.id], courier: 'Zentryx Fleet Transport', shippedAt: new Date().toISOString() } : so));
+    const printWindow = window.open('', '_blank', 'width=900,height=700');
+    printWindow.document.write(finalHTML);
+    printWindow.document.close();
+    
+    setSoData(soData.map(so => newNums[so.id] ? { ...so, status: 'Shipped', trackingNumber: newNums[so.id], courier: batchCourier, shippedAt: new Date().toISOString() } : so));
     setSelectedIds([]);
+    setIsBatchModalOpen(false);
     addToast(`${toPrint.length} Cargo manifests generated and escalated to Shipped.`, 'success');
   };
 
@@ -653,7 +683,7 @@ const PickPackShip = () => {
             
             {/* Conditional Batch Action Buttons */}
             {soData.filter(so => selectedIds.includes(so.id)).every(so => so.status === 'Packing') && (
-              <button onClick={handleBatchPrint} className="bg-amber-600 hover:bg-amber-700 text-white px-4 py-1.5 rounded-sm text-[9px] font-bold uppercase tracking-wider shadow-sm transition-colors flex items-center gap-1.5">
+              <button onClick={() => setIsBatchModalOpen(true)} className="bg-amber-600 hover:bg-amber-700 text-white px-4 py-1.5 rounded-sm text-[9px] font-bold uppercase tracking-wider shadow-sm transition-colors flex items-center gap-1.5">
                 <span>🖨️</span> Batch Print Freight Labels
               </button>
             )}
@@ -973,12 +1003,9 @@ const PickPackShip = () => {
               <div>
                 <label className="block text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-2">Assign Fleet / Carrier <span className="text-red-500">*</span></label>
                 <select value={selectedCourier} onChange={e => setSelectedCourier(e.target.value)} className="w-full border border-gray-300 p-3 outline-none focus:border-[#125ab2] font-black text-[#125ab2] bg-blue-50/30 rounded-sm shadow-sm cursor-pointer text-sm">
-                  <option>Zentryx Fleet Transport</option>
-                  <option>ARUS Internal Logistics</option>
-                  <option>Maersk Global Freight</option>
-                  <option>DHL Enterprise Express</option>
+                  {courierOptions.map(c => <option key={c} value={c}>{c}</option>)}
                 </select>
-                <p className="text-[9px] text-gray-400 font-bold uppercase tracking-wider mt-2 text-center">A shipping label with Master AWB will be generated.</p>
+                <p className="text-[9px] text-gray-400 font-bold uppercase tracking-wider mt-2 text-center">A shipping label with Master AWB will be generated in a new window.</p>
               </div>
 
             </div>
@@ -987,6 +1014,49 @@ const PickPackShip = () => {
               <button onClick={() => { setActiveSO(null); setSelectedCourier('Zentryx Fleet Transport'); }} className="w-full sm:w-auto px-5 py-2.5 bg-white border border-gray-300 hover:bg-gray-100 text-gray-700 text-[10px] font-bold uppercase tracking-wider transition-colors shadow-sm rounded-sm">Cancel</button>
               <button onClick={handleProsesKirimSingle} className="w-full sm:w-auto px-6 py-2.5 bg-[#125ab2] hover:bg-[#0e4487] text-white text-[10px] font-bold uppercase tracking-wider shadow-sm transition-colors rounded-sm flex items-center justify-center gap-2">
                 <span>🖨️</span> Print Label & Dispatch
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* 🛡️ MODAL: BATCH PRINT EXECUTION                                           */}
+      {/* ========================================================================= */}
+      {isBatchModalOpen && (
+        <div className="fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center z-[100] p-4 sm:p-6 overflow-hidden">
+          <div className="bg-white rounded-sm w-full max-w-[450px] shadow-2xl flex flex-col relative animate-fade-in border-t-4 border-t-amber-500" style={{ maxHeight: 'calc(100vh - 2rem)' }}>
+            
+            <div className="bg-amber-500 text-white px-6 py-4 flex justify-between items-center shrink-0 z-10">
+              <div>
+                <p className="text-[10px] font-black uppercase tracking-widest mb-0.5 opacity-90">Mass Dispatch Execution</p>
+                <h3 className="font-black text-sm uppercase tracking-wider">Batch Print Freight Labels</h3>
+              </div>
+              <button onClick={() => setIsBatchModalOpen(false)} className="text-white opacity-80 hover:opacity-100 font-bold text-xl leading-none px-2">✕</button>
+            </div>
+            
+            <div className="p-6 overflow-y-auto flex-1 custom-scrollbar z-0 space-y-6">
+              
+              <div className="text-center">
+                <span className="text-5xl block mb-2 opacity-80">🚛</span>
+                <p className="text-4xl font-black text-gray-900 font-mono">{selectedIds.length}</p>
+                <p className="text-[10px] font-bold text-gray-500 uppercase tracking-widest mt-1">Cargo Manifests Queued</p>
+              </div>
+
+              <div>
+                <label className="block text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-2">Assign Fleet/Carrier for entire batch <span className="text-red-500">*</span></label>
+                <select value={batchCourier} onChange={e => setBatchCourier(e.target.value)} className="w-full border border-gray-300 p-3 outline-none focus:border-amber-500 font-black text-amber-700 bg-amber-50/50 rounded-sm shadow-sm cursor-pointer text-sm">
+                  {courierOptions.map(c => <option key={c} value={c}>{c}</option>)}
+                </select>
+                <p className="text-[9px] text-gray-400 font-bold uppercase tracking-wider mt-2 text-center text-amber-600/80">Make sure pop-ups are allowed in your browser.</p>
+              </div>
+
+            </div>
+            
+            <div className="bg-gray-50 border-t border-gray-200 px-6 py-4 flex flex-col sm:flex-row justify-end gap-3 shrink-0 z-10">
+              <button onClick={() => setIsBatchModalOpen(false)} className="w-full sm:w-auto px-5 py-2.5 bg-white border border-gray-300 hover:bg-gray-100 text-gray-700 text-[10px] font-bold uppercase tracking-wider transition-colors shadow-sm rounded-sm">Cancel</button>
+              <button onClick={handleBatchPrintExecute} className="w-full sm:w-auto px-6 py-2.5 bg-amber-500 hover:bg-amber-600 text-white text-[10px] font-black uppercase tracking-wider shadow-sm transition-colors rounded-sm flex items-center justify-center gap-2">
+                <span>🖨️</span> Execute {selectedIds.length} Labels
               </button>
             </div>
           </div>

@@ -97,7 +97,7 @@ const Sidebar = () => {
       {/* --- LIST MODUL NAVIGASI --- */}
       <div className="flex-1 overflow-y-auto custom-scrollbar py-2 flex flex-col">
         <div className="mb-2">
-          <NavItem to="dashboard" label="Dashboard Utama" icon="📊" />
+          <NavItem to="dashboard" label="DASHBOARD" icon="📊" />
         </div>
         
         <NavGroup id="receiving" title="Receiving & Inbound" icon="📥" openMenus={openMenus} toggleMenu={toggleMenu}>

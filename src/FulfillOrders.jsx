@@ -39,6 +39,48 @@ const FulfillOrders = () => {
   };
   const removeToast = (id) => setToasts(prev => prev.filter(t => t.id !== id));
 
+  // ─── 🚀 DEV MODE: INJECT PESANAN EV PLATFORM ───
+  const injectSimulationOrder = () => {
+    const newOrder = {
+      id: `SO-ARS-${Math.floor(1000 + Math.random() * 9000)}`,
+      customer: 'PT Energi Nusantara (B2B Fleet)',
+      date: todayStr,
+      address: '📍 Surabaya, East Java, ID',
+      notes: 'Urgent Delivery - 10 Units EV Platform',
+      weight: 8500, // 10 units x 850kg
+      type: 'Finished Goods',
+      priority: 'Critical',
+      status: 'Pending',
+      items: [{ sku: 'SKU-ARS-EVPLATFORM', qty: 10, desc: 'ARUS EV Skateboard Platform' }],
+      createdAt: new Date().toISOString()
+    };
+    setSoData(prev => [newOrder, ...prev]);
+    addToast('Simulation Order Injected! Please release it to the Warehouse.', 'success');
+  };
+
+  // ─── 🚀 ACTION: RELEASE TO WAREHOUSE & CREATE TASK ───
+  const releaseOrder = (so) => {
+    setSoData(prev => prev.map(item => item.id === so.id ? { ...item, status: 'Ready to Pick' } : item));
+    
+    // Memicu Tugas Scanner Otomatis ke Operator Gudang
+    dispatchAutoTask({
+      type: 'Picking',
+      desc: `Pick order for ${so.customer}`,
+      zone: 'Zone B (Outbound Dispatch)',
+      assignee: 'Warehouse Operator',
+      priority: so.priority || 'High',
+      isLocked: false,
+      dependency: 'None',
+      sku: so.items?.[0]?.sku || 'SKU-UNKNOWN',
+      refId: so.id,
+      qty: so.items?.[0]?.qty || 1,
+      weight: `${so.weight} KG`,
+      notes: so.notes || 'Auto-generated from Outbound SO.'
+    });
+    
+    addToast(`Order ${so.id} released. Picking task transmitted to Floor Scanners.`, 'success');
+  };
+
   // ─── INTERACTIVE STATES ───
   const [activeSO, setActiveSO] = useState(null); // Print & Ship Modal
   const [selectedCourier, setSelectedCourier] = useState('Zentryx Flatbed Fleet');
@@ -61,7 +103,7 @@ const FulfillOrders = () => {
   const [deleteConfirmId, setDeleteConfirmId] = useState(null);
 
   const courierOptions = ['Zentryx Flatbed Fleet', 'Zentryx Express Logistics', 'Krakatau Freight LTL', 'Maersk Global Cargo', 'Special Hazmat Carrier'];
-  const typeOptions = ['Standard Parts', 'Heavy Chassis', 'Hazmat (LFP Battery)', 'Electronics (ESD)'];
+  const typeOptions = ['Standard Parts', 'Heavy Chassis', 'Hazmat (LFP Battery)', 'Electronics (ESD)', 'Finished Goods'];
 
   // ─── SUMMARY STATS ───
   const stats = useMemo(() => ({
@@ -127,9 +169,10 @@ const FulfillOrders = () => {
   // ─── UI HELPERS ───
   const getStatusBadge = (status) => {
     const map = {
+      'Pending': 'bg-amber-100 text-amber-800 border-amber-300 animate-pulse', // Added Pending status
       'Ready to Pick': 'bg-blue-100 text-blue-800 border-blue-300',
       'Packed / Staged': 'bg-purple-100 text-purple-800 border-purple-300',
-      'Shipped': 'bg-amber-100 text-amber-800 border-amber-300',
+      'Shipped': 'bg-orange-100 text-orange-800 border-orange-300',
       'Delivered': 'bg-emerald-100 text-emerald-800 border-emerald-300',
     };
     return map[status] || 'bg-gray-100 text-gray-600 border-gray-300';
@@ -302,7 +345,6 @@ const FulfillOrders = () => {
     addToast('Delivered orders archived to master ledger.', 'info');
   };
 
-  // ─── 🚀 INJEKSI INTERLOCK: Saat Membuat Outbound Manifest Baru ───
   const handleSaveNewSO = (e) => {
     e.preventDefault();
     if (!newSOForm.customer || !newSOForm.weight) return addToast('Customer and Weight are mandatory.', 'error');
@@ -313,7 +355,6 @@ const FulfillOrders = () => {
     setSoData([{ id: newId, ...newSOForm, status: 'Ready to Pick' }, ...soData]);
     setIsNewSOModalOpen(false);
     
-    // 💥 TRIGGER PICKING TASK OTOMATIS KE SCANNER
     dispatchAutoTask({
       type: 'Picking',
       desc: `Pick order for ${newSOForm.customer} (${newSOForm.type})`,
@@ -383,6 +424,11 @@ const FulfillOrders = () => {
           <p className="text-sm text-gray-500 mt-1">Manage outbound assembly pipelines, generate Hazmat labels, and track 3PL couriers.</p>
         </div>
         <div className="flex flex-wrap gap-2 w-full md:w-auto">
+          {/* 🚀 TOMBOL INJECT TEST ORDER 🚀 */}
+          <button onClick={injectSimulationOrder} className="bg-white border border-blue-300 text-[#125ab2] hover:bg-blue-50 px-4 py-2.5 rounded-sm shadow-sm text-[10px] font-black uppercase tracking-wider transition-colors flex items-center gap-1.5">
+            <span className="text-sm">🧪</span> Inject Test Order (10x FG)
+          </button>
+          
           <button onClick={handleExportCSV} className="bg-white border border-gray-300 text-gray-700 hover:bg-gray-50 px-4 py-2.5 rounded-sm shadow-sm text-[10px] font-bold uppercase tracking-wider transition-colors">
             ⭳ Export CSV
           </button>
@@ -434,6 +480,7 @@ const FulfillOrders = () => {
           <div className="flex flex-wrap gap-2 w-full lg:w-auto">
             <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)} className="border border-gray-300 bg-gray-50 px-3 py-2 text-xs font-bold text-gray-700 outline-none rounded-sm cursor-pointer shadow-sm min-w-[150px]">
               <option value="All">All Pipeline Stages</option>
+              <option value="Pending">Pending (Unreleased)</option>
               <option value="Ready to Pick">Ready to Pick</option>
               <option value="Packed / Staged">Packed / Staged</option>
               <option value="Shipped">Shipped (In Transit)</option>
@@ -487,6 +534,7 @@ const FulfillOrders = () => {
                 </tr>
               ) : (
                 filteredData.map((so) => {
+                  const isPending = so.status === 'Pending';
                   const isReady = so.status === 'Ready to Pick';
                   const isPacked = so.status === 'Packed / Staged';
                   const isShipped = so.status === 'Shipped';
@@ -542,12 +590,19 @@ const FulfillOrders = () => {
                             {so.courier && <div className="text-[10px] font-bold text-gray-500 uppercase tracking-wider mt-1.5">🚚 {so.courier}</div>}
                           </div>
                         ) : (
-                          <span className="text-[9px] font-bold text-gray-400 uppercase tracking-wider italic">Awaiting Dispatch</span>
+                          <span className="text-[9px] font-bold text-gray-400 uppercase tracking-wider italic">
+                            {isPending ? 'Pending Execution' : 'Awaiting Dispatch'}
+                          </span>
                         )}
                       </td>
                       
                       <td className="py-4 px-4 text-right">
                         <div className="flex flex-wrap items-center justify-end gap-1.5">
+                          {isPending && (
+                            <button onClick={(e) => { e.stopPropagation(); releaseOrder(so); }} className="bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1.5 rounded-sm text-[9px] font-bold uppercase tracking-wider transition-colors shadow-sm">
+                              Release to Whse
+                            </button>
+                          )}
                           {isReady && (
                             <button onClick={(e) => { e.stopPropagation(); updateSOStatus(so.id, 'Packed / Staged'); }} className="bg-purple-600 hover:bg-purple-700 text-white px-3 py-1.5 rounded-sm text-[9px] font-bold uppercase tracking-wider transition-colors shadow-sm">
                               Pack Order

@@ -8,7 +8,7 @@ const Toast = ({ toasts, removeToast }) => (
       <div key={id} className={`flex items-center gap-3 px-4 py-3 rounded-lg shadow-xl text-white text-xs font-semibold min-w-[280px] backdrop-blur-md bg-opacity-95 ${
         type === 'success' ? 'bg-emerald-600' : type === 'error' ? 'bg-rose-600' : type === 'warning' ? 'bg-amber-500' : 'bg-[#125ab2]'
       }`}>
-        <span className="text-base">{type === 'success' ? '✓' : type === 'error' ? '✕' : type === 'warning' ? '⚠️' : '⚡'}</span>
+        <span className="text-base">{type === 'success' ? '✓' : type === 'error' ? '✕' : type === 'warning' ? '⚠' : '⚡'}</span>
         <span className="flex-1">{message}</span>
         <button onClick={() => removeToast(id)} className="opacity-70 hover:opacity-100 text-lg leading-none transition-opacity">×</button>
       </div>
@@ -17,7 +17,8 @@ const Toast = ({ toasts, removeToast }) => (
 );
 
 const Putaway = () => {
-  const { setHalaman, taskData, completeTaskAndSync } = useContext(AppContext);
+  // Tambahkan dispatchAutoTask dari AppContext
+  const { setHalaman, taskData, completeTaskAndSync, dispatchAutoTask } = useContext(AppContext);
 
   // ─── STATE MANAGEMENT ───
   const [toasts, setToasts] = useState([]);
@@ -30,18 +31,17 @@ const Putaway = () => {
 
   // ─── 🚀 ENGINE INTERLOCK: FETCH UNLOCKED PUTAWAY TASKS ───
   const putawayTasks = useMemo(() => {
-    // Tarik hanya tugas Putaway yang TIDAK terkunci (Sudah Lolos QC) dan belum selesai
     return (taskData || []).filter(t => t.type === 'Putaway' && !t.isLocked && t.status !== 'Completed').map(t => ({
       id: t.id,
       sku: t.sku || 'N/A',
       name: t.desc,
-      qty: t.qty || 10, // Default 10 jika qty kosong
+      qty: t.qty || 10,
       uom: 'Units',
-      sourceLoc: 'QC Staging Area',
+      sourceLoc: t.sourceLoc || 'QC Staging Area', 
       targetZone: t.zone || 'ZONE-A (Ambient)',
-      targetBin: `${t.zone ? t.zone.charAt(0) : 'A'}-01-01`, // Mocking lokasi Bin dinamis berdasarkan Zone
+      targetBin: t.targetBin || `${t.zone ? t.zone.charAt(0) : 'A'}-01-01`, 
       isDG: t.sku?.includes('LFP') || false,
-      weight: `${(t.qty || 10) * 5} kg`,
+      weight: t.weight || `${(t.qty || 10) * 5} kg`, 
       status: t.status === 'Not Started' ? 'Ready for Putaway' : t.status
     }));
   }, [taskData]);
@@ -68,15 +68,12 @@ const Putaway = () => {
   const executePutaway = useCallback((taskId) => {
     addToast(`Confirming Putaway transaction for Task ${taskId}...`, 'info');
     setTimeout(() => {
-      // 1. Sinkronisasi Inventory Global & Menghapus Task dari Antrean
       completeTaskAndSync(taskId);
-      
-      addToast(`✅ Putaway Confirmed. Inventory successfully transferred to Core Database.`, 'success');
+      addToast(`Putaway Confirmed. Inventory successfully transferred to Core Database.`, 'success');
       setActiveTask(null);
     }, 600);
   }, [completeTaskAndSync, addToast]);
 
-  // ─── CORE SCANNER LOGIC (DIPAKAI OLEH LISTENER MAUPUN INPUT MANUAL) ───
   const processBarcode = useCallback((scannedCode) => {
     const code = scannedCode.toUpperCase().trim();
     addToast(`Scanner Detected: ${code}`, 'info');
@@ -90,13 +87,11 @@ const Putaway = () => {
     }
   }, [activeTask, addToast, executePutaway]);
 
-  // ─── 1. INVISIBLE HARDWARE LISTENER (Menggunakan useRef agar tidak terhapus Re-render) ───
   const bufferRef = useRef('');
   const timerRef = useRef(null);
 
   useEffect(() => {
     const handleGlobalScan = (e) => {
-      // Abaikan jika user sedang mengetik di kolom input/textarea apapun
       if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
 
       if (e.key === 'Enter' && bufferRef.current.length > 0) {
@@ -105,7 +100,6 @@ const Putaway = () => {
         bufferRef.current = '';
       } else if (e.key.length === 1) {
         bufferRef.current += e.key;
-        // Beri waktu 5 detik bagi user untuk menyelesaikan ketikannya
         clearTimeout(timerRef.current);
         timerRef.current = setTimeout(() => { bufferRef.current = ''; }, 5000);
       }
@@ -118,7 +112,6 @@ const Putaway = () => {
     };
   }, [processBarcode]);
 
-  // ─── 2. VISIBLE SIMULATOR SUBMIT ───
   const handleSimulatedSubmit = (e) => {
     e.preventDefault();
     if (simulatedScan) {
@@ -127,12 +120,32 @@ const Putaway = () => {
     }
   };
 
+  // ─── FUNGSI KHUSUS UNTUK INJECT TEST DATA ───
+  const injectSimulationTask = () => {
+    const randomSuffix = Math.floor(Math.random() * 9000) + 1000;
+    dispatchAutoTask({
+      id: `TSK-PTW-${randomSuffix}`,
+      type: 'Putaway',
+      desc: 'Move Finished Good (Skateboard Platform) from Assembly',
+      zone: 'Zone B (Outbound Dispatch)',
+      targetBin: 'B-OUT-01',
+      sourceLoc: 'Assembly Line A',
+      assignee: 'Forklift Operator',
+      priority: 'Critical',
+      refId: `WO-SIM-${randomSuffix}`,
+      sku: 'SKU-ARS-EVPLATFORM',
+      qty: 10,
+      weight: '8,500 kg'
+    });
+    addToast('FG Putaway Task Injected from Assembly!', 'success');
+  };
+
   return (
     <div className="bg-[#f3f6f9] min-h-screen px-4 py-6 md:px-8 font-sans text-slate-800">
       <Toast toasts={toasts} removeToast={removeToast} />
 
       {/* ── HEADER ── */}
-      <div className="max-w-[1500px] mx-auto mb-6 flex flex-col md:flex-row justify-between items-start md:items-end border-b border-slate-200 pb-3 gap-4 animate-fade-in">
+      <div className="max-w-[1500px] mx-auto mb-6 flex flex-col xl:flex-row justify-between items-start xl:items-end border-b border-slate-200 pb-3 gap-4 animate-fade-in">
         <div>
           <div className="flex items-center gap-2 text-[10px] text-slate-500 font-bold uppercase tracking-widest mb-1">
             <span>🔀 Receiving</span> <span className="text-slate-300">/</span> <span className="text-[#125ab2]">Inbound</span>
@@ -140,8 +153,21 @@ const Putaway = () => {
           <h1 className="text-2xl font-black text-slate-800 tracking-tight">Directed Putaway</h1>
         </div>
         
-        {/* Zentryx AI Telemetry & Visible Scanner Simulator */}
+        {/* ACTION CONTROLS */}
         <div className="flex flex-wrap gap-3">
+          
+          {/* TOMBOL INJECT (DEV MODE) */}
+          <button 
+            onClick={injectSimulationTask}
+            className="bg-[#125ab2] hover:bg-[#0e4487] text-white px-4 py-2 rounded-xl shadow-sm flex flex-col justify-center transition-colors border border-blue-800"
+          >
+            <span className="text-[8px] font-bold text-blue-300 uppercase tracking-wider mb-0.5">Dev Testing Mode</span>
+            <div className="flex items-center gap-1.5">
+              <span className="text-sm">🧪</span>
+              <span className="text-[10px] font-black uppercase tracking-wider">Inject Test FG</span>
+            </div>
+          </button>
+
           <div className="bg-white border border-slate-200 px-4 py-2 rounded-xl shadow-sm flex flex-col justify-center">
             <span className="text-[8px] font-bold text-slate-400 uppercase tracking-wider mb-0.5">Zentryx AI Routing</span>
             <div className="flex items-center gap-2">
@@ -150,7 +176,6 @@ const Putaway = () => {
             </div>
           </div>
 
-          {/* VISIBLE SCANNER SIMULATOR (Solusi Anti-Gagal) */}
           <form onSubmit={handleSimulatedSubmit} className="bg-slate-800 border border-slate-700 px-4 py-2 rounded-xl shadow-sm flex flex-col justify-center">
             <span className="text-[8px] font-bold text-slate-400 uppercase tracking-wider mb-0.5">Hardware Scanner Simulator</span>
             <div className="flex items-center gap-2">
@@ -159,7 +184,7 @@ const Putaway = () => {
                 type="text" 
                 value={simulatedScan}
                 onChange={(e) => setSimulatedScan(e.target.value)}
-                placeholder="Type bin here & Enter..." 
+                placeholder="Type bin & Enter..." 
                 className="bg-transparent text-emerald-400 text-[10px] font-mono outline-none border-b border-slate-600 focus:border-emerald-400 w-32 placeholder-slate-500 transition-colors"
               />
             </div>
@@ -324,7 +349,7 @@ const Putaway = () => {
                 <div className="flex justify-between items-center border-b border-slate-100 pb-3">
                   <span className="text-xs font-bold text-slate-500 uppercase">Max Structural Limit</span>
                   <span className="text-sm font-black text-slate-800">
-                    {modalBin.data.targetZone.includes('Heavy') ? '5,000 kg' : modalBin.data.targetZone.includes('Cold') ? '2,500 kg' : '1,500 kg'}
+                    {modalBin.data.targetZone.includes('Heavy') ? '5,000 kg' : modalBin.data.targetZone.includes('Cold') ? '2,500 kg' : '10,000 kg'}
                   </span>
                 </div>
                 <div className="flex justify-between items-center pb-2">

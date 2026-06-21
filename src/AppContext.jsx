@@ -17,7 +17,7 @@ export const AppProvider = ({ children }) => {
   // Mengambil kamus aktif
   const teks = translations[bahasa] || translations.en;
 
-  // ─── 2. STATE OTENTIKASI RBAC (BARU UNTUK FASE 10) ───
+  // ─── 2. STATE OTENTIKASI RBAC ───
   const [user, setUser] = useState(() => {
     try {
       const saved = window.localStorage.getItem('zentryx_user');
@@ -30,9 +30,7 @@ export const AppProvider = ({ children }) => {
     try {
       const saved = window.localStorage.getItem('zentryx_inventory');
       return saved ? JSON.parse(saved) : [
-        // REVISI: Menambahkan BATT-LFP-75K dengan stok 0 agar dikenali oleh sistem BOM
         { sku: 'BATT-LFP-75K', name: 'LFP Battery Cell 3.2V', category: 'Energy Storage', qty: 0, price: 120, location: 'ZONE-B-02' },
-        
         { sku: 'SKU-ARS-LFP01', name: 'Blade Battery Cell 3.2V 150Ah', category: 'Energy Storage', qty: 4500, price: 250, location: 'ZONE-B-01' },
         { sku: 'SKU-ARS-MCU03', name: 'Motor Control Unit (MCU) Gen 3', category: 'Powertrain', qty: 210, price: 850, location: 'ZONE-A-05' },
         { sku: 'SKU-ARS-CBL12', name: 'High Voltage Harness Cable 50mm2', category: 'Electrical', qty: 12500, price: 12, location: 'ZONE-A-01' },
@@ -78,6 +76,34 @@ export const AppProvider = ({ children }) => {
     } catch { return null; }
   });
 
+  // ─── TRIGGER SIMULASI OTOMATIS: WO-ARS-6689 ───
+  // Skrip ini akan otomatis menambahkan tugas Putaway dari hasil perakitan
+  // tanpa mengharuskan Anda menghapus Local Storage
+  useEffect(() => {
+    setTaskData(prev => {
+      const hasSimulationTask = prev.some(t => t.refId === 'WO-ARS-6689' || t.id === 'TSK-PTW-6689');
+      if (!hasSimulationTask) {
+        return [{
+          id: 'TSK-PTW-6689', 
+          type: 'Putaway', 
+          desc: 'Move Finished Good (Skateboard Platform) from Assembly to Outbound Dispatch', 
+          zone: 'Zone B (Outbound Dispatch)', 
+          targetBin: 'B-OUT-01',
+          sourceLoc: 'Assembly Line A',
+          assignee: 'Forklift Operator', 
+          priority: 'Critical', 
+          status: 'Not Started', 
+          refId: 'WO-ARS-6689', 
+          isLocked: false, 
+          sku: 'SKU-ARS-EVPLATFORM', 
+          qty: 10,
+          weight: '8,500 kg'
+        }, ...prev];
+      }
+      return prev;
+    });
+  }, []);
+
   // ─── 4. PERSISTENCE ENGINE (MENYIMPAN PERUBAHAN KE LOCAL STORAGE) ───
   useEffect(() => {
     if (user) window.localStorage.setItem('zentryx_user', JSON.stringify(user));
@@ -91,19 +117,13 @@ export const AppProvider = ({ children }) => {
   useEffect(() => { if (globalBOMs) window.localStorage.setItem('zentryx_globalBOMs', JSON.stringify(globalBOMs)); }, [globalBOMs]);
 
   // ─── 5. GLOBAL INTERLOCK FUNCTIONS (FUNGSI PENGHUBUNG ANTAR MODUL) ───
-  /**
-   * Mengirim tugas otomatis ke Scanner UI Operator Gudang.
-   * DIKUNCI dengan useCallback dan "Functional Updates (prevTasks)" agar terhindar dari Infinite Loop.
-   */
   const dispatchAutoTask = useCallback((newTaskConfig) => {
     setTaskData(prevTasks => {
-      // Mencegah duplikasi tugas jika refId dan tipe tugas yang sama sudah ada dan belum selesai
       const isDuplicate = prevTasks.some(t => 
         t.refId === newTaskConfig.refId && 
         t.type === newTaskConfig.type && 
         t.status !== 'Completed'
       );
-      
       if (isDuplicate) return prevTasks;
 
       const newTask = {
@@ -113,14 +133,10 @@ export const AppProvider = ({ children }) => {
         createdAt: new Date().toISOString(),
         ...newTaskConfig
       };
-
       return [newTask, ...prevTasks];
     });
   }, []);
 
-  /**
-   * Menyelesaikan tugas fisik dan mensinkronisasikan stok secara real-time ke DB Inventory.
-   */
   const completeTaskAndSync = useCallback((taskId) => {
     setTaskData(prevTasks => {
       const taskIndex = prevTasks.findIndex(t => t.id === taskId);
@@ -140,21 +156,21 @@ export const AppProvider = ({ children }) => {
               qty: newInv[existingItemIndex].qty + (Number(task.qty) || 0)
             };
           } else {
-            // Jika ini SKU baru yang belum pernah ada di gudang
-            newInv.push({
+            // Jika SKU baru (Finished Good) belum ada di Master Data Gudang
+            newInv.unshift({
               sku: task.sku || 'SKU-UNKNOWN',
               name: task.desc || 'Newly Received Item',
               qty: Number(task.qty) || 0,
-              category: 'Inbound Receivals',
+              category: 'Finished Goods',
               location: task.targetBin || task.zone || 'Zone A (Staging)',
-              price: 0
+              price: 33530 // Menggunakan HPP EV Platform dari BOM
             });
           }
           return newInv;
         });
       }
 
-      // Tandai tugas di Scanner UI sebagai selesai
+      // Tandai tugas sebagai selesai
       const updatedTasks = [...prevTasks];
       updatedTasks[taskIndex] = { 
         ...task, 
@@ -167,25 +183,17 @@ export const AppProvider = ({ children }) => {
     });
   }, []);
 
-  // ─── 6. MEMOIZATION ENGINE (OPTIMASI RENDER REACT & ANTI MEMORY LEAK) ───
-  // Memastikan Context Value memiliki referensi memori yang stabil
+  // ─── 6. MEMOIZATION ENGINE ───
   const contextValue = useMemo(() => ({
-    // RBAC Auth
     user, setUser,
-
-    // UI Routing & Config
     halaman, setHalaman,
     bahasa, setBahasa,
     teks,
-    
-    // Core Databases
     inventoryData, setInventoryData,
     poData, setPoData,
     soData, setSoData,
     taskData, setTaskData,
     globalBOMs, setGlobalBOMs,
-    
-    // Interlock APIs
     dispatchAutoTask,
     completeTaskAndSync
   }), [
