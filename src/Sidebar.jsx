@@ -1,8 +1,58 @@
 import React, { useContext, useState } from 'react';
 import { AppContext } from './AppContext';
 
+// ─── 1. KOMPONEN HELPER DIPINDAHKAN KE LUAR ───
+// Ini mencegah React mereset posisi scrollbar saat menu diklik
+
+const NavItem = ({ to, label, icon }) => {
+  const { halaman, setHalaman } = useContext(AppContext);
+  // Menghapus spasi untuk pencocokan route
+  const activeRoute = halaman?.replace(/\s+/g, '') || '';
+  const targetRoute = to.replace(/\s+/g, '');
+  const isActive = activeRoute === targetRoute;
+  
+  return (
+    <a
+      href={`#${to}`}
+      onClick={(e) => {
+        e.preventDefault();
+        if (setHalaman) setHalaman(to);
+      }}
+      className={`flex items-center gap-3 px-6 py-2.5 text-xs transition-colors ${
+        isActive 
+          ? 'bg-[#125ab2] text-white border-l-4 border-white font-bold' 
+          : 'text-gray-300 hover:bg-[#2d425b] hover:text-white border-l-4 border-transparent font-medium'
+      }`}
+    >
+      <span className="text-sm w-5 text-center">{icon || '▪'}</span>
+      <span>{label}</span>
+    </a>
+  );
+};
+
+const NavGroup = ({ id, title, icon, children, openMenus, toggleMenu }) => {
+  const isOpen = openMenus[id];
+  return (
+    <div className="mb-1">
+      <button
+        onClick={() => toggleMenu(id)}
+        className={`w-full flex items-center justify-between px-5 py-3 text-xs text-gray-200 hover:bg-[#2d425b] hover:text-white transition-colors ${isOpen ? 'bg-[#1a2838]' : ''}`}
+      >
+        <div className="flex items-center gap-3">
+          <span className="text-base w-5 text-center">{icon || '❖'}</span>
+          <span className="font-bold uppercase tracking-wider text-[11px]">{title}</span>
+        </div>
+        <span className="text-[10px] opacity-70">{isOpen ? '▼' : '▶'}</span>
+      </button>
+      {isOpen && <div className="bg-[#15202b] py-1">{children}</div>}
+    </div>
+  );
+};
+
+// ─── 2. KOMPONEN UTAMA SIDEBAR ───
+
 const Sidebar = () => {
-  const { halaman, setHalaman, user } = useContext(AppContext);
+  const { user } = useContext(AppContext);
   
   // State untuk mengontrol akordion menu yang terbuka
   const [openMenus, setOpenMenus] = useState({
@@ -23,52 +73,6 @@ const Sidebar = () => {
     setOpenMenus(prev => ({ ...prev, [menu]: !prev[menu] }));
   };
 
-  // Komponen Helper untuk Link Navigasi Tunggal
-  const NavItem = ({ to, label, icon }) => {
-    // Menghapus spasi untuk pencocokan route (mengantisipasi salah ketik/OCR pada App.jsx)
-    const activeRoute = halaman?.replace(/\s+/g, '') || '';
-    const targetRoute = to.replace(/\s+/g, '');
-    const isActive = activeRoute === targetRoute;
-    
-    return (
-      <a
-        href={`#${to}`}
-        onClick={(e) => {
-          e.preventDefault();
-          if (setHalaman) setHalaman(to);
-        }}
-        className={`flex items-center gap-3 px-6 py-2.5 text-xs transition-colors ${
-          isActive 
-            ? 'bg-[#125ab2] text-white border-l-4 border-white font-bold' 
-            : 'text-gray-300 hover:bg-[#2d425b] hover:text-white border-l-4 border-transparent font-medium'
-        }`}
-      >
-        <span className="text-sm w-5 text-center">{icon || '▪'}</span>
-        <span>{label}</span>
-      </a>
-    );
-  };
-
-  // Komponen Helper untuk Grup Akordion Navigasi
-  const NavGroup = ({ id, title, icon, children }) => {
-    const isOpen = openMenus[id];
-    return (
-      <div className="mb-1">
-        <button
-          onClick={() => toggleMenu(id)}
-          className={`w-full flex items-center justify-between px-5 py-3 text-xs text-gray-200 hover:bg-[#2d425b] hover:text-white transition-colors ${isOpen ? 'bg-[#1a2838]' : ''}`}
-        >
-          <div className="flex items-center gap-3">
-            <span className="text-base w-5 text-center">{icon || '❖'}</span>
-            <span className="font-bold uppercase tracking-wider text-[11px]">{title}</span>
-          </div>
-          <span className="text-[10px] opacity-70">{isOpen ? '▼' : '▶'}</span>
-        </button>
-        {isOpen && <div className="bg-[#15202b] py-1">{children}</div>}
-      </div>
-    );
-  };
-
   return (
     <aside className="w-[280px] h-screen bg-[#213346] text-white flex flex-col shadow-xl overflow-hidden shrink-0 z-50 transition-all duration-300">
       {/* --- HEADER SIDEBAR --- */}
@@ -79,20 +83,31 @@ const Sidebar = () => {
         <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest ml-9">WMS Gigafactory</p>
       </div>
 
+      {/* --- SECURITY LEVEL (Opsional, dari versi sebelumnya) --- */}
+      {user && (
+        <div className="px-6 py-4 bg-[#15202b] border-b border-[#2d425b] shrink-0">
+          <p className="text-[9px] text-gray-400 uppercase tracking-widest font-bold mb-1">Security Level</p>
+          <div className="flex items-center gap-2">
+            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+            <p className="text-xs font-black text-emerald-400 uppercase tracking-wider">{user.role || 'MANAGER CLEARANCE'}</p>
+          </div>
+        </div>
+      )}
+
       {/* --- LIST MODUL NAVIGASI --- */}
       <div className="flex-1 overflow-y-auto custom-scrollbar py-2 flex flex-col">
         <div className="mb-2">
           <NavItem to="dashboard" label="Dashboard Utama" icon="📊" />
         </div>
         
-        <NavGroup id="receiving" title="Receiving & Inbound" icon="📥">
+        <NavGroup id="receiving" title="Receiving & Inbound" icon="📥" openMenus={openMenus} toggleMenu={toggleMenu}>
           <NavItem to="receivePO" label="Receive PO" />
           <NavItem to="inbound" label="Inbound Shipments" />
           <NavItem to="qc" label="Quality Inspection" />
           <NavItem to="putaway" label="Putaway" />
         </NavGroup>
 
-        <NavGroup id="inventory" title="Inventory & Stock" icon="📦">
+        <NavGroup id="inventory" title="Inventory & Stock" icon="📦" openMenus={openMenus} toggleMenu={toggleMenu}>
           <NavItem to="invOverview" label="Inventory Overview" />
           <NavItem to="newitem" label="New Item Master" />
           <NavItem to="itemSearch" label="Item Search" />
@@ -106,19 +121,19 @@ const Sidebar = () => {
           <NavItem to="landedCost" label="Landed Cost" />
         </NavGroup>
 
-        <NavGroup id="manufacturing" title="Manufacturing" icon="⚙️">
+        <NavGroup id="manufacturing" title="Manufacturing" icon="⚙️" openMenus={openMenus} toggleMenu={toggleMenu}>
           <NavItem to="bom" label="Bill of Materials (BOM)" />
           <NavItem to="workOrders" label="Work Orders" />
           <NavItem to="assemblyBuilds" label="Assembly Builds" />
         </NavGroup>
 
-        <NavGroup id="shipping" title="Fulfillment & Shipping" icon="📤">
+        <NavGroup id="shipping" title="Fulfillment & Shipping" icon="📤" openMenus={openMenus} toggleMenu={toggleMenu}>
           <NavItem to="fulfillOrders" label="Fulfill Orders" />
           <NavItem to="pickpack" label="Pick, Pack & Ship" />
           <NavItem to="manifests" label="Shipping Manifests" />
         </NavGroup>
 
-        <NavGroup id="procurement" title="Procurement & Demand" icon="🛒">
+        <NavGroup id="procurement" title="Procurement & Demand" icon="🛒" openMenus={openMenus} toggleMenu={toggleMenu}>
           <NavItem to="procRequisitions" label="Purchase Requisitions" />
           <NavItem to="procPO" label="Purchase Orders" />
           <NavItem to="procVendors" label="Vendor Management" />
@@ -128,7 +143,7 @@ const Sidebar = () => {
           <NavItem to="demandSafety" label="Safety Stock" />
         </NavGroup>
 
-        <NavGroup id="activities" title="Activities & Tasks" icon="📅">
+        <NavGroup id="activities" title="Activities & Tasks" icon="📅" openMenus={openMenus} toggleMenu={toggleMenu}>
           <NavItem to="events" label="Events" />
           <NavItem to="calls" label="Calls" />
           <NavItem to="calendar" label="Calendar View" />
@@ -137,7 +152,7 @@ const Sidebar = () => {
           <NavItem to="shiftRoster" label="Shift Roster" />
         </NavGroup>
 
-        <NavGroup id="reports" title="Reports & Analytics" icon="📈">
+        <NavGroup id="reports" title="Reports & Analytics" icon="📈" openMenus={openMenus} toggleMenu={toggleMenu}>
           <NavItem to="inventoryReports" label="Inventory Reports" />
           <NavItem to="valuation" label="Inventory Valuation" />
           <NavItem to="aging" label="Stock Aging" />
@@ -153,7 +168,7 @@ const Sidebar = () => {
           <NavItem to="logisticsReports" label="Logistics Reports" />
         </NavGroup>
 
-        <NavGroup id="operations" title="Operations & Docs" icon="🛠️">
+        <NavGroup id="operations" title="Operations & Docs" icon="🛠️" openMenus={openMenus} toggleMenu={toggleMenu}>
           <NavItem to="maintenance" label="Equipment Maintenance" />
           <NavItem to="engineeringMRO" label="Engineering & MRO" />
           <NavItem to="returnsRma" label="Returns & RMA" />
@@ -165,7 +180,7 @@ const Sidebar = () => {
           <NavItem to="scanner" label="Scanner Device UI" />
         </NavGroup>
 
-        <NavGroup id="setup" title="Setup & Integrations" icon="🔧">
+        <NavGroup id="setup" title="Setup & Integrations" icon="🔧" openMenus={openMenus} toggleMenu={toggleMenu}>
           <NavItem to="setupCompany" label="Company Settings" />
           <NavItem to="setupRoles" label="Access Roles" />
           <NavItem to="setupLayout" label="Warehouse Layout" />
@@ -175,7 +190,7 @@ const Sidebar = () => {
           <NavItem to="appsScanner" label="Hardware Scanners" />
         </NavGroup>
         
-        <NavGroup id="support" title="System & Support" icon="❓">
+        <NavGroup id="support" title="System & Support" icon="❓" openMenus={openMenus} toggleMenu={toggleMenu}>
           <NavItem to="helpCenter" label="Knowledge Base" />
           <NavItem to="supportTicket" label="Support Tickets" />
           <NavItem to="systemStatus" label="System Status" />
